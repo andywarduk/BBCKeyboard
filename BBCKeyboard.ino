@@ -1,5 +1,5 @@
 // Debug flag
-#define DEBUG
+//#define DEBUG
 
 #include "BBCKeyboard.h"
 
@@ -29,9 +29,9 @@
 
 // Pin numbers
 
-const int led1Pin = A1;
-const int led2Pin = A0;
-const int led3Pin = A2;
+const int ledShiftLockPin = A1;
+const int ledCapsLockPin = A0;
+const int ledCassPin = A2;
 
 // Column
 const int pa0Pin = 7;
@@ -57,6 +57,17 @@ char BreakState;
 // Current USB report
 unsigned char UsbReport[8];
 
+// LED status
+#define LEDMODE_REPORT (-1)
+#define LEDMODE_SCROLL (-2)
+
+int LedMode = LEDMODE_REPORT;
+uint8_t LastLedStatus = 0;
+
+int LedCtr1 = 0;
+int LedCtr2 = 0;
+uint8_t LedScroll[] = {
+  1, 3, 7, 6, 4, 0}; // xxO xOO OOO OOx Oxx xxx
 
 void setup()
 {
@@ -68,10 +79,10 @@ void setup()
 #elif OUTPUTTYPE == OT_KEYBOARD
   // Initialise the keyboard output
   Keyboard.begin();
-  
+  Serial.begin(9600);
+
 # ifdef DEBUG
   // Initialise serial and wait if debugging active
-  Serial.begin(9600);
   while(!Serial);
 
   Serial.print("KEYBOARD output\n");
@@ -84,9 +95,9 @@ void setup()
 #endif
 
   // Set up the pins
-  pinMode(led1Pin, OUTPUT);
-  pinMode(led2Pin, OUTPUT);
-  pinMode(led3Pin, OUTPUT);
+  pinMode(ledShiftLockPin, OUTPUT);
+  pinMode(ledCapsLockPin, OUTPUT);
+  pinMode(ledCassPin, OUTPUT);
 
   pinMode(pa0Pin, OUTPUT);      
   pinMode(pa1Pin, OUTPUT);      
@@ -105,9 +116,9 @@ void setup()
   pinMode(clkPin, OUTPUT);
 
   // Turn LEDs off
-  digitalWrite(led1Pin, 1);
-  digitalWrite(led2Pin, 1);
-  digitalWrite(led3Pin, 1);
+  digitalWrite(ledShiftLockPin, 1);
+  digitalWrite(ledCapsLockPin, 1);
+  digitalWrite(ledCassPin, 1);
 
   // Initialise key state
   for(int Col = 0; Col < MAXCOL; Col++){    
@@ -128,23 +139,17 @@ void setup()
 #endif
 }
 
-int ctr = 0;
-
 void loop()
 {
   unsigned int Row;
   unsigned int Col;
-
-  // Cycle LEDs
-  digitalWrite(led1Pin, (ctr & 0x100) ? 0 : 1);
-  digitalWrite(led2Pin, (ctr & 0x200) ? 0 : 1);
-  digitalWrite(led3Pin, (ctr & 0x400) ? 0 : 1);
-  ++ctr;
+  uint8_t LedStatus;
+  unsigned char SerChar;
 
   // Check each column in turn
   for(Col = 0; Col < 10; Col++){
     SetRowCol(0, Col);
-    
+
     // If CA2 pin raised then a key on this column is pressed
     if(digitalRead(ca2Pin)){
       // There is a key down in this column
@@ -193,6 +198,77 @@ void loop()
   else{
     SetBreakState('D');
   }
+
+#if OUTPUTTYPE == OT_KEYBOARD
+  // Got any data on the serial channel?
+  while(Serial.available() > 0){
+    SerChar = Serial.read();
+
+#ifdef DEBUG
+    Serial.write("Read char ");
+    Serial.print(SerChar, HEX);
+    Serial.write(" from Serial\n");
+#endif
+
+    switch(SerChar){
+    case 'R':
+    case 'r':
+      LedMode = LEDMODE_REPORT;
+      break;
+    case 'S':
+    case 's':
+      LedMode = LEDMODE_SCROLL;
+      break;
+    default:
+      if(SerChar >= '0' && SerChar <= '7'){
+        LedMode = SerChar - '0';
+      }
+    }
+  }
+#endif
+
+  // Update LED state
+  switch(LedMode){
+  case LEDMODE_SCROLL:
+    // Scroll LEDs
+    if(++LedCtr1 >= 80){
+      LedCtr1 = 0;
+      if(++LedCtr2 == 6) LedCtr2 = 0;
+      SetLedStatus(LedScroll[LedCtr2]);
+    }
+    break;
+
+  case LEDMODE_REPORT:
+    // Get LED state from HID / Serial
+#if OUTPUTTYPE == OT_KEYBOARD
+    // Update LED state from HID
+    LedStatus = Keyboard.getLedStatus();
+#elif OUTPUTTYPE == OT_SERIAL
+    // Get LED state from serial
+    while(Serial.available() > 0){
+      LedStatus = Serial.read();
+    }
+#endif
+
+    if(LedStatus != LastLedStatus){
+#ifdef DEBUG
+      Serial.write("LED status changed from ");
+      Serial.print(LastLedStatus, HEX);
+      Serial.write(" to ");
+      Serial.print(LedStatus, HEX);
+      Serial.write("\n");
+#endif
+
+      SetLedStatus(LedStatus);
+    }
+    break;
+
+  default:
+    // Forced LED mode
+    SetLedStatus(LedMode);
+    break;
+
+  }
 }
 
 void SetRowCol(unsigned int Row, unsigned int Col)
@@ -210,7 +286,7 @@ void SetRowCol(unsigned int Row, unsigned int Col)
 void SetRow(unsigned int Row)
 {
   // Set current keyboard array row
-  
+
   digitalWrite(pa4Pin, (Row & 0x1 ? HIGH : LOW));
   digitalWrite(pa5Pin, (Row & 0x2 ? HIGH : LOW));
   digitalWrite(pa6Pin, (Row & 0x4 ? HIGH : LOW));
@@ -219,7 +295,7 @@ void SetRow(unsigned int Row)
 void SetCol(unsigned int Col)
 {
   // Set current keyboard array column
-  
+
   digitalWrite(pa0Pin, (Col & 0x1 ? HIGH : LOW));
   digitalWrite(pa1Pin, (Col & 0x2 ? HIGH : LOW));
   digitalWrite(pa2Pin, (Col & 0x4 ? HIGH : LOW));
@@ -229,11 +305,11 @@ void SetCol(unsigned int Col)
 void SetKeyState(unsigned int Col, unsigned int Row, char State)
 {
   // Set a key to a given state
-  
+
   KeyDet *Key;
 
   if(KeyState[Col][Row] != State){
-    
+
     // Key state changed
     KeyState[Col][Row] = State;
 
@@ -267,7 +343,7 @@ void SetKeyState(unsigned int Col, unsigned int Row, char State)
 void SetBreakState(char State)
 {
   // Set the BREAK key state
-  
+
   KeyDet *Key;
 
   if(BreakState != State){
@@ -298,7 +374,7 @@ void SetBreakState(char State)
 void UpdateReport(KeyDet *Key, unsigned char State)
 {
   // Update the report with a given key and state
-  
+
   unsigned int Report;
   int SendReport;
 
@@ -316,14 +392,10 @@ void UpdateReport(KeyDet *Key, unsigned char State)
 #if OUTPUTTYPE == OT_SERIAL
       // Use serial output
       Serial.write(UsbReport, 8);
-      
 #elif OUTPUTTYPE == OT_KEYBOARD
       // Use keyboard HID output
       HID_SendReport(2, UsbReport, 8);
-
 #endif
-
-      // TODO GET LED STATE BACK?
 
 #ifdef DEBUG
       // Dump the report
@@ -336,7 +408,7 @@ void UpdateReport(KeyDet *Key, unsigned char State)
 int AddReport(unsigned int Report)
 {
   // Add a key to the report
-  
+
   int Changed = 0;
   unsigned char Byte;
 
@@ -365,7 +437,7 @@ int AddReport(unsigned int Report)
 int RemoveReport(unsigned int Report)
 {
   // Remove a key from the report
-  
+
   int Changed = 0;
   unsigned char Byte;
 
@@ -391,13 +463,21 @@ int RemoveReport(unsigned int Report)
   return Changed;
 }
 
+void SetLedStatus(uint8_t LedStatus)
+{
+  digitalWrite(ledShiftLockPin, (LedStatus & 0x1) ? 0 : 1);
+  digitalWrite(ledCapsLockPin, (LedStatus & 0x2) ? 0 : 1);
+  digitalWrite(ledCassPin, (LedStatus & 0x4) ? 0 : 1);
+
+  LastLedStatus = LedStatus;
+}
 
 #ifdef DEBUG
 
 void DumpReport()
 {
   // Dump current key report
-  
+
   Serial.print("REPORT: ");
   for(int Loop = 0; Loop < 8; Loop++){
     Serial.print(UsbReport[Loop], HEX);
@@ -409,42 +489,78 @@ void DumpReport()
 void InitCheck()
 {
   // Sanity checks
-  
-  unsigned int Col1, Row1;
-  unsigned int Col2, Row2;
+
+  unsigned int Col, Row;
   unsigned int Elem;
   unsigned int Report;
   unsigned char Used[256];
+  unsigned char ModUsed;
 
   for(Elem = 0; Elem < 256; Elem++) Used[Elem] = 0;
+  ModUsed = 0;
 
-  for(Row1 = 0; Row1 < MAXROW; Row1++){
-    for(Col1 = 0; Col1 < MAXCOL; Col1++){
-      Report = KeyDetails[Row1][Col1].Report;
-
-      if(Report < 256) Used[Report] = 1;
-
-      for(Row2 = 0; Row2 < MAXROW; Row2++){
-        for(Col2 = 0; Col2 < MAXCOL; Col2++){
-          if(KeyDetails[Row2][Col2].Report == Report && 
-            Row1 != Row2 && Col1 != Col2) {
-            Serial.write("Duplicated report ");
-            Serial.print(Report, HEX);
-            Serial.write("\n");
-          }
-        }
-      }    
+  for(Row = 0; Row < MAXROW; Row++){
+    for(Col = 0; Col < MAXCOL; Col++){
+      Report = KeyDetails[Row][Col].Report;
+      CheckReport(Report, Used, &ModUsed);
     }
   }
 
+  Report = BreakDetails.Report;
+  CheckReport(Report, Used, &ModUsed);
+
   for(Elem = 0; Elem < 256; Elem++){
-    if((Elem % 16) == 0) Serial.write("\n");
+    if((Elem % 16) == 0){
+      if(Elem == 0) Serial.write("    0123456789abcdef");
+      Serial.write("\n");
+      Serial.print((Elem / 16) & 0xf0, HEX);
+      Serial.print((Elem / 16) & 0x0f, HEX);
+      Serial.write(": ");
+    }
     if(Used[Elem]) Serial.write("X");
     else Serial.write(".");
   }
   Serial.write("\n");
 }
 
+void CheckReport(unsigned int Report, unsigned char *Used, unsigned char *ModUsed)
+{
+  if(Report == 0) return;
+
+  if(Report >= 256){
+    if(Report & MODKEY && (Report & ~MODKEY) < 256){
+      Report &= 0x0f;
+      if(*ModUsed & Report){
+        Serial.write("Duplicated modifier ");
+        Serial.print(Report, HEX);
+        Serial.write("\n");            
+      }
+      *ModUsed |= Report;
+    }
+    else{
+      Serial.write("Unrecognised report ");
+      Serial.print(Report, HEX);
+      Serial.write("\n");            
+    }
+  }
+  else{
+    if(Used[Report]){
+      Serial.write("Duplicated report ");
+      Serial.print(Report, HEX);
+      Serial.write("\n");            
+    }
+    Used[Report] = 1;
+  }
+}
+
 #endif
+
+
+
+
+
+
+
+
 
 
