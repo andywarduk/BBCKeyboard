@@ -24,31 +24,32 @@
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
 // | 0v |RST |1mhz|KBEN|PA4 |PA5 |PA6 |PA0 |PA1 |PA2 |PA3 |PA7 |LED3|CA2 | 5v |LED1|LED2|
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-// |GND |D2  |D3  |GND |D4  |D5  |D6  |D7  |D8  |D9  |D10 |D11 |A2  |D12 | 5V |A1  |A0  |
+// |GND |D2  |D3  |D4  |D5  |D6  |D7  |D8  |D9  |D10 |D11 |D11 |A0  |D13 | 5V |A1  |A2  |
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
 
 // Pin numbers
 
 const int ledShiftLockPin = A1;
-const int ledCapsLockPin = A0;
-const int ledCassPin = A2;
+const int ledCapsLockPin = A2;
+const int ledCassPin = A0;
 
 // Column
-const int pa0Pin = 7;
-const int pa1Pin = 8;
-const int pa2Pin = 9;
-const int pa3Pin = 10;
+const int pa0Pin = 8;
+const int pa1Pin = 9;
+const int pa2Pin = 10;
+const int pa3Pin = 11;
 
 // Row
-const int pa4Pin = 4;
-const int pa5Pin = 5;
-const int pa6Pin = 6;
+const int pa4Pin = 5;
+const int pa5Pin = 6;
+const int pa6Pin = 7;
 
-const int pa7Pin = 11;
-const int ca2Pin = 12;
+const int pa7Pin = 12;
+const int ca2Pin = 13;
 const int breakPin = 2;
 
 const int clkPin =  3;
+const int kbEnPin = 4;
 
 // Keyboard state
 char KeyState[MAXCOL][MAXROW];
@@ -114,11 +115,15 @@ void setup()
   digitalWrite(breakPin, HIGH); // Pull up resistor on break pin
 
   pinMode(clkPin, OUTPUT);
+  pinMode(kbEnPin, OUTPUT);
 
   // Turn LEDs off
-  digitalWrite(ledShiftLockPin, 1);
-  digitalWrite(ledCapsLockPin, 1);
-  digitalWrite(ledCassPin, 1);
+  digitalWrite(ledShiftLockPin, HIGH);
+  digitalWrite(ledCapsLockPin, HIGH);
+  digitalWrite(ledCassPin, HIGH);
+
+  // Pull KB/EN low
+  digitalWrite(kbEnPin, LOW);
 
   // Initialise key state
   for(int Col = 0; Col < MAXCOL; Col++){    
