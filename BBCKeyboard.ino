@@ -24,13 +24,13 @@
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
 // | 0v |RST |1mhz|KBEN|PA4 |PA5 |PA6 |PA0 |PA1 |PA2 |PA3 |PA7 |LED3|CA2 | 5v |LED1|LED2|
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
-// |GND |D2  |D3  |D4  |D5  |D6  |D7  |D8  |D9  |D10 |D11 |D11 |A0  |D13 | 5V |A1  |A2  |
+// |GND |D2  |D3  |D4  |D5  |D6  |D7  |D8  |D9  |D10 |D11 |D11 |A0  |D13 | 5V |A2  |A1  |
 // +----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+----+
 
 // Pin numbers
 
-const int ledShiftLockPin = A1;
-const int ledCapsLockPin = A2;
+const int ledShiftLockPin = A2;
+const int ledCapsLockPin = A1;
 const int ledCassPin = A0;
 
 // Column
@@ -69,6 +69,17 @@ int LedCtr1 = 0;
 int LedCtr2 = 0;
 uint8_t LedScroll[] = {
   1, 3, 7, 6, 4, 0}; // xxO xOO OOO OOx Oxx xxx
+
+// Prototypes
+void SetRowCol(unsigned int Row, unsigned int Col);
+void SetRow(unsigned int Row);
+void SetCol(unsigned int Col);
+void SetKeyState(unsigned int Col, unsigned int Row, char State);
+void SetBreakState(char State);
+void SetLedStatus(uint8_t LedStatus);
+void UpdateReport(KeyDet *Key, unsigned char State);
+int AddReport(unsigned int Report);
+int RemoveReport(unsigned int Report);
 
 void setup()
 {
